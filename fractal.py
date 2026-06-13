@@ -73,10 +73,11 @@ void main() {
 """
 
 CONTROLS = [
-    "Z       hold to zoom in",
-    "Scroll  zoom in / out",
-    "Drag    pan",
-    "0       reset view",
+    "Z         hold to zoom in",
+    "Shift+Z   hold to zoom out",
+    "Scroll    zoom in / out",
+    "Drag      pan",
+    "0         reset view",
 ]
 
 def make_overlay_texture(ctx, lines, font_size=15):
@@ -102,6 +103,26 @@ def make_overlay_texture(ctx, lines, font_size=15):
     return tex, w, h
 
 
+def make_cursor_texture(ctx, font_size=28):
+    try:
+        font = ImageFont.truetype("/System/Library/Fonts/Apple Color Emoji.ttc", font_size)
+    except Exception:
+        try:
+            font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", font_size)
+        except Exception:
+            font = ImageFont.load_default()
+
+    symbol = "✦"
+    size = font_size + 8
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    draw.text((size // 2, size // 2), symbol, font=font, fill=(255, 255, 255, 220), anchor="mm")
+
+    tex = ctx.texture((size, size), 4, img.tobytes())
+    tex.filter = moderngl.LINEAR, moderngl.LINEAR
+    return tex, size
+
+
 class Fractal(mglw.WindowConfig):
     title = "Mandelbrot"
     window_size = (1200, 800)
@@ -117,14 +138,21 @@ class Fractal(mglw.WindowConfig):
         self.overlay_prog = self.ctx.program(vertex_shader=OVERLAY_VERT, fragment_shader=OVERLAY_FRAG)
         self.overlay_tex, tw, th = make_overlay_texture(self.ctx, CONTROLS)
         self._build_overlay_vao(tw, th)
+        self.cursor_tex, self.cursor_size = make_cursor_texture(self.ctx)
+        self.cursor_vbo = self.ctx.buffer(reserve=4 * 4 * 4)
+        self.cursor_vao = self.ctx.simple_vertex_array(
+            self.overlay_prog, self.cursor_vbo, 'in_pos', 'in_uv'
+        )
 
         self.center = np.array([-0.5, 0.0], dtype='f4')
         self.zoom = 1.5
         self.drag_start = None
         self.drag_center = None
         self.mouse_pos = np.array([0.0, 0.0], dtype='f4')
-        self.zooming = False
-        self.zoom_speed = 0.6  # zoom per second while Z held
+        self.zoom_dir = 0  # -1 out, 0 stopped, 1 in
+        self.zoom_speed = 0.6
+
+        self.wnd.cursor = False
 
     def _build_overlay_vao(self, tw, th):
         w, h = self.wnd.size
@@ -155,8 +183,8 @@ class Fractal(mglw.WindowConfig):
         self.center = mouse_c - (mouse_c - self.center) * factor
 
     def on_render(self, time, frame_time):
-        if self.zooming:
-            factor = self.zoom_speed ** frame_time
+        if self.zoom_dir != 0:
+            factor = self.zoom_speed ** (frame_time * self.zoom_dir)
             self._zoom_toward_mouse(factor)
 
         self.ctx.clear()
@@ -167,14 +195,37 @@ class Fractal(mglw.WindowConfig):
 
         self.ctx.enable(moderngl.BLEND)
         self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
+
         self.overlay_tex.use()
         self.overlay_vao.render(moderngl.TRIANGLE_STRIP)
+
+        # Draw ✦ cursor centered on mouse position
+        mx, my = self.mouse_pos
+        w, h = self.wnd.size
+        cs = self.cursor_size
+        cx0 = (mx - cs / 2) / w * 2 - 1
+        cx1 = (mx + cs / 2) / w * 2 - 1
+        cy1 = 1 - (my - cs / 2) / h * 2
+        cy0 = 1 - (my + cs / 2) / h * 2
+        cursor_verts = np.array([
+            cx0, cy0,  0, 1,
+            cx1, cy0,  1, 1,
+            cx0, cy1,  0, 0,
+            cx1, cy1,  1, 0,
+        ], dtype='f4')
+        self.cursor_vbo.write(cursor_verts.tobytes())
+        self.cursor_tex.use()
+        self.cursor_vao.render(moderngl.TRIANGLE_STRIP)
+
         self.ctx.disable(moderngl.BLEND)
 
     def on_key_event(self, key, action, modifiers):
         keys = self.wnd.keys
         if key == keys.Z:
-            self.zooming = (action == keys.ACTION_PRESS)
+            if action == keys.ACTION_RELEASE:
+                self.zoom_dir = 0
+            else:
+                self.zoom_dir = -1 if modifiers.shift else 1
         if action == keys.ACTION_PRESS and key == keys.NUMBER_0:
             self.center = np.array([-0.5, 0.0], dtype='f4')
             self.zoom = 1.5

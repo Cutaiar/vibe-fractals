@@ -24,6 +24,11 @@ python3 fractal.py
 | Input | Action |
 |---|---|
 | `Z` (hold) | Zoom in toward cursor |
+| `Shift+Z` (hold) | Zoom out |
 | Scroll | Zoom in / out |
 | Drag | Pan |
 | `0` | Reset view |
+
+## Preview
+
+![screenshot](screenshot.png)
