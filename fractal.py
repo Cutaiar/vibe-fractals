@@ -29,14 +29,17 @@ vec3 palette(float t) {
 
 void main() {
     vec2 aspect = vec2(resolution.x / resolution.y, 1.0);
-    vec2 c = center + v_uv * aspect * zoom;
 
-    vec2 z = vec2(0.0);
+    // Use highp for coordinate math to push precision as far as float32 allows
+    highp vec2 c = center + v_uv * aspect * zoom;
+    highp vec2 z = vec2(0.0);
+
+    // Scale iterations with zoom depth — more detail as we go deeper
+    float maxIter = clamp(256.0 + 80.0 * log(1.5 / max(zoom, 1e-8)), 256.0, 1500.0);
+
     float iter = 0.0;
-    float maxIter = 256.0;
-
-    for (float i = 0.0; i < 256.0; i++) {
-        if (dot(z, z) > 4.0) break;
+    for (float i = 0.0; i < 1500.0; i++) {
+        if (i >= maxIter || dot(z, z) > 4.0) break;
         z = vec2(z.x*z.x - z.y*z.y + c.x, 2.0*z.x*z.y + c.y);
         iter++;
     }

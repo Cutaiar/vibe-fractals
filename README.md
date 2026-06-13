@@ -29,6 +29,10 @@ python3 fractal.py
 | Drag | Pan |
 | `0` | Reset view |
 
+## Precision limit
+
+The viewer uses 32-bit floats (float32) for all GPU math. Iteration count scales dynamically with zoom depth, but float32 runs out of precision around **1×10⁷ magnification** — at that point adjacent pixels map to the same coordinate value and the image breaks into large colored blocks. Going deeper requires either double-precision emulation or perturbation theory (see powerful explorers like Kalles Fraktaler or Ultra Fractal).
+
 ## Preview
 
 ![screenshot](screenshot.png)
